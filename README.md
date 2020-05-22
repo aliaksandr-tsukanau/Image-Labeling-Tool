@@ -1,5 +1,7 @@
 # PyQt Image Annotation Tool
 
+Adjusted from [this project](https://github.com/robertbrada/PyQt-image-annotation-tool)
+
 This app is used to label images in a directory.
 Labeled images can be moved/copied into directories, which are named as assigned labels.
 It's a single Python script with GUI.
@@ -40,7 +42,3 @@ Code is tested on Windows 10 and Ubuntu 18.04
 - N: Next image
 - P: Previous image
 - 1-9: Select label
-
-## Contributing
-
-Pull requests are welcome.
