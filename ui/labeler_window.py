@@ -9,7 +9,9 @@ from PyQt5.QtGui import QKeySequence, QPixmap
 from PyQt5.QtWidgets import QWidget, QLabel, QCheckBox, QShortcut
 from xlsxwriter import Workbook
 
+from core.configuration import Configuration
 from core.filesystem import get_img_paths, make_folder
+from core.utils import labels_to_one_hot
 
 
 class LabelerWindow(QWidget):
@@ -27,14 +29,14 @@ class LabelerWindow(QWidget):
         self.img_panel_height = 650
 
         # state variables
+        self.configuration = Configuration(
+            input_folder,
+            labels,
+            mode,
+        )
+
         self.counter = 0
-        self.input_folder = input_folder
-        self.img_paths = get_img_paths(input_folder)
-        self.labels = labels
-        self.num_labels = len(self.labels)
-        self.num_images = len(self.img_paths)
         self.assigned_labels = {}
-        self.mode = mode
 
         # initialize list to save all label buttons
         self.label_buttons = []
@@ -51,7 +53,7 @@ class LabelerWindow(QWidget):
 
         # create label folders
         if mode == 'copy' or mode == 'move':
-            self.create_label_folders(labels, self.input_folder)
+            self.create_label_folders(labels, self.configuration.input_folder)
 
         # init UI
         self.init_ui()
@@ -91,15 +93,15 @@ class LabelerWindow(QWidget):
         self.csv_generated_message.setStyleSheet('color: #43A047')
 
         # show image
-        self.set_image(self.img_paths[0])
+        self.set_image(self.configuration.img_paths[0])
         self.image_box.setGeometry(20, 120, self.img_panel_width, self.img_panel_height)
         self.image_box.setAlignment(Qt.AlignTop)
 
         # image name
-        self.img_name_label.setText(self.img_paths[self.counter])
+        self.img_name_label.setText(self.configuration.img_paths[self.counter])
 
         # progress bar
-        self.progress_bar.setText(f'image 1 of {self.num_images}')
+        self.progress_bar.setText(f'image 1 of {self.configuration.num_images}')
 
         # draw line to for better UX
         ui_line = QLabel(self)
@@ -141,7 +143,7 @@ class LabelerWindow(QWidget):
 
         # Create button for each label
         x_shift = 0  # variable that helps to compute x-coordinate of button in UI
-        for i, label in enumerate(self.labels):
+        for i, label in enumerate(self.configuration.labels):
             self.label_buttons.append(QtWidgets.QPushButton(label, self))
             button = self.label_buttons[i]
 
@@ -169,7 +171,7 @@ class LabelerWindow(QWidget):
         """
 
         # get image filename from path (./data/images/img1.jpg → img1.jpg)
-        img_path = self.img_paths[self.counter]
+        img_path = self.configuration.img_paths[self.counter]
         img_name = os.path.split(img_path)[-1]
 
         # if the img has some label already
@@ -184,36 +186,36 @@ class LabelerWindow(QWidget):
                     self.assigned_labels.pop(img_name, None)
 
                 # remove image from appropriate folder
-                if self.mode == 'copy':
-                    os.remove(os.path.join(self.input_folder, label, img_name))
+                if self.configuration.mode == 'copy':
+                    os.remove(os.path.join(self.configuration.input_folder, label, img_name))
 
-                elif self.mode == 'move':
+                elif self.configuration.mode == 'move':
                     # label was in assigned labels, so I want to remove it from label folder,
                     # but this was the last label, so move the image to input folder.
                     # Don't remove it, because it it not save anywehre else
                     if img_name not in self.assigned_labels.keys():
-                        shutil.move(os.path.join(self.input_folder, label, img_name), self.input_folder)
+                        shutil.move(os.path.join(self.configuration.input_folder, label, img_name), self.configuration.input_folder)
                     else:
                         # label was in assigned labels and the image is store in another label folder,
                         # so I want to remove it from current label folder
-                        os.remove(os.path.join(self.input_folder, label, img_name))
+                        os.remove(os.path.join(self.configuration.input_folder, label, img_name))
 
             # label is not there yet. But the image has some labels already
             else:
                 self.assigned_labels[img_name].append(label)
 
                 # path to copy/move images
-                copy_to = os.path.join(self.input_folder, label)
+                copy_to = os.path.join(self.configuration.input_folder, label)
 
                 # copy/move the image into appropriate label folder
-                if self.mode == 'copy':
+                if self.configuration.mode == 'copy':
                     # the image is stored in input_folder, so i can copy it from there (differs from 'move' option)
                     shutil.copy(img_path, copy_to)
 
-                elif self.mode == 'move':
+                elif self.configuration.mode == 'move':
                     # the image doesn't have to be stored in input_folder anymore.
                     # get the path where the image is stored
-                    copy_from = os.path.join(self.input_folder, self.assigned_labels[img_name][0], img_name)
+                    copy_from = os.path.join(self.configuration.input_folder, self.assigned_labels[img_name][0], img_name)
                     shutil.copy(copy_from, copy_to)
 
         else:
@@ -221,11 +223,11 @@ class LabelerWindow(QWidget):
 
             self.assigned_labels[img_name] = [label]
             # move copy images to appropriate directories
-            copy_to = os.path.join(self.input_folder, label)
+            copy_to = os.path.join(self.configuration.input_folder, label)
 
-            if self.mode == 'copy':
+            if self.configuration.mode == 'copy':
                 shutil.copy(img_path, copy_to)
-            elif self.mode == 'move':
+            elif self.configuration.mode == 'move':
                 shutil.move(img_path, copy_to)
 
         # load next image
@@ -238,27 +240,27 @@ class LabelerWindow(QWidget):
         """
         loads and shows next image in dataset
         """
-        if self.counter < self.num_images - 1:
+        if self.counter < self.configuration.num_images - 1:
             self.counter += 1
 
-            path = self.img_paths[self.counter]
+            path = self.configuration.img_paths[self.counter]
             filename = os.path.split(path)[-1]
 
             # If we have already assigned label to this image and mode is 'move', change the input path.
             # The reason is that the image was moved from '.../input_folder' to '.../input_folder/label'
-            if self.mode == 'move' and filename in self.assigned_labels.keys():
-                path = os.path.join(self.input_folder, self.assigned_labels[filename][0], filename)
+            if self.configuration.mode == 'move' and filename in self.assigned_labels.keys():
+                path = os.path.join(self.configuration.input_folder, self.assigned_labels[filename][0], filename)
 
             self.set_image(path)
             self.img_name_label.setText(path)
-            self.progress_bar.setText(f'image {self.counter + 1} of {self.num_images}')
+            self.progress_bar.setText(f'image {self.counter + 1} of {self.configuration.num_images}')
             self.set_button_color(filename)
             self.csv_generated_message.setText('')
 
 
         # change button color if this is last image in dataset
-        elif self.counter == self.num_images - 1:
-            path = self.img_paths[self.counter]
+        elif self.counter == self.configuration.num_images - 1:
+            path = self.configuration.img_paths[self.counter]
             self.set_button_color(os.path.split(path)[-1])
 
     def show_prev_image(self):
@@ -268,18 +270,18 @@ class LabelerWindow(QWidget):
         if self.counter > 0:
             self.counter -= 1
 
-            if self.counter < self.num_images:
-                path = self.img_paths[self.counter]
+            if self.counter < self.configuration.num_images:
+                path = self.configuration.img_paths[self.counter]
                 filename = os.path.split(path)[-1]
 
                 # If we have already assigned label to this image and mode is 'move', change the input path.
                 # The reason is that the image was moved from '.../input_folder' to '.../input_folder/label'
-                if self.mode == 'move' and filename in self.assigned_labels.keys():
-                    path = os.path.join(self.input_folder, self.assigned_labels[filename][0], filename)
+                if self.configuration.mode == 'move' and filename in self.assigned_labels.keys():
+                    path = os.path.join(self.configuration.input_folder, self.assigned_labels[filename][0], filename)
 
                 self.set_image(path)
                 self.img_name_label.setText(path)
-                self.progress_bar.setText(f'image {self.counter + 1} of {self.num_images}')
+                self.progress_bar.setText(f'image {self.counter + 1} of {self.configuration.num_images}')
 
                 self.set_button_color(filename)
                 self.csv_generated_message.setText('')
@@ -312,7 +314,7 @@ class LabelerWindow(QWidget):
         Assigned label is represented as one-hot vector.
         :param out_filename: name of csv file to be generated
         """
-        path_to_save = os.path.join(self.input_folder, 'output')
+        path_to_save = os.path.join(self.configuration.input_folder, 'output')
         make_folder(path_to_save)
         csv_file_path = os.path.join(path_to_save, out_filename) + '.csv'
 
@@ -320,11 +322,11 @@ class LabelerWindow(QWidget):
             writer = csv.writer(csv_file, delimiter=',')
 
             # write header
-            writer.writerow(['img'] + self.labels)
+            writer.writerow(['img'] + self.configuration.labels)
 
             # write one-hot labels
             for img_name, labels in self.assigned_labels.items():
-                labels_one_hot = self.labels_to_zero_one(labels)
+                labels_one_hot = labels_to_one_hot(labels)
                 writer.writerow([img_name] + list(labels_one_hot))
 
         message = f'csv saved to: {csv_file_path}'
@@ -377,24 +379,6 @@ class LabelerWindow(QWidget):
         """
         print("closing the App..")
         self.generate_csv('assigned_classes_automatically_generated')
-
-    def labels_to_zero_one(self, labels):
-        """
-        Convert number to one-hot vector
-        :param number: number which represents for example class index
-        :param num_classes: number of classes in dataset so I know how long the vector should be
-        :return:
-        """
-
-        # create mapping from label name to its index for better efficiency {label : int}
-        label_to_int = dict((c, i) for i, c in enumerate(self.labels))
-
-        # initialize array to save selected labels
-        zero_one_arr = np.zeros([self.num_labels], dtype=int)
-        for label in labels:
-            zero_one_arr[label_to_int[label]] = 1
-
-        return zero_one_arr
 
     @staticmethod
     def create_label_folders(labels, folder):
