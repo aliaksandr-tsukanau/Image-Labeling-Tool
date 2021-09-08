@@ -1,6 +1,6 @@
 numpy==1.18.4
 openslide-python==1.1.1
-Pillow==7.1.2
+Pillow==8.3.2
 PyQt5==5.14.2
 PyQt5-sip==12.7.2
 XlsxWriter==1.2.8
